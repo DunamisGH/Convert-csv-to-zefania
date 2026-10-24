@@ -86,14 +86,16 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Convert a CSV with book, chapter, verse, and text columns to Zefania XML."
     )
-    parser.add_argument("input", type=Path, help="source CSV file")
-    parser.add_argument("output", type=Path, help="destination XML file")
+    parser.add_argument("input", type=Path, nargs="?", help="source CSV file")
+    parser.add_argument("output", type=Path, nargs="?", help="destination XML file (defaults to the input name with .xml)")
     parser.add_argument("--book-column", default="book", help="CSV header for book name (default: book)")
     parser.add_argument("--chapter-column", default="chapter", help="CSV header for chapter (default: chapter)")
     parser.add_argument("--verse-column", default="verse", help="CSV header for verse (default: verse)")
     parser.add_argument("--text-column", default="text", help="CSV header for verse text (default: text)")
     parser.add_argument("--delimiter", default=",", help="one-character CSV delimiter (default: comma)")
     args = parser.parse_args()
+    if args.input is None and args.output is not None:
+        parser.error("provide an input path before the output path")
     if len(args.delimiter) != 1:
         parser.error("--delimiter must be exactly one character")
     return args
@@ -101,6 +103,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.input is None:
+        return run_file_picker(args)
+    if args.output is None:
+        args.output = args.input.with_suffix(".xml")
     try:
         convert(args)
     except (OSError, UnicodeError, csv.Error, ValueError) as error:
@@ -108,6 +114,43 @@ def main() -> int:
         return 1
     print(f"Created {args.output}")
     return 0
+
+
+def run_file_picker(args: argparse.Namespace) -> int:
+    """GUI entry point used when the script is double-clicked."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog, messagebox
+    except ImportError:
+        print("The file picker needs tkinter. Run the script from a terminal and provide input and output paths.", file=sys.stderr)
+        return 1
+
+    window = tk.Tk()
+    window.withdraw()
+    window.update()
+    try:
+        selected = filedialog.askopenfilename(
+            title="Choose a Bible verses CSV file",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not selected:
+            return 0
+        args.input = Path(selected)
+        args.output = args.input.with_suffix(".xml")
+        if args.output.exists() and not messagebox.askyesno(
+            "Replace existing XML?",
+            f"{args.output.name} already exists. Replace it?",
+            parent=window,
+        ):
+            return 0
+        convert(args)
+        messagebox.showinfo("Conversion complete", f"Created:\n{args.output}", parent=window)
+        return 0
+    except (OSError, UnicodeError, csv.Error, ValueError) as error:
+        messagebox.showerror("Conversion failed", str(error), parent=window)
+        return 1
+    finally:
+        window.destroy()
 
 
 if __name__ == "__main__":

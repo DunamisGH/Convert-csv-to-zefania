@@ -22,7 +22,13 @@ Genesis,1,2,"And the earth was without form, and void."
 
 Save the file as UTF-8, for example `verses.csv`. A UTF-8 file with a BOM (often produced by Excel) is also accepted by default.
 
-## 2. Run the converter
+## 2. Double-click to convert
+
+Double-click `convert_csv_to_zefania.py`. Choose a CSV in the file picker. The XML is saved beside the CSV with the same base name: `FNT.csv` becomes `FNT.xml`. If that XML already exists, the script asks before replacing it. Cancel the file picker to exit.
+
+Python must be installed and associated with `.py` files for double-clicking to work. On Windows, the Python installer normally offers this association. If double-clicking opens the file in an editor or does nothing, use the terminal command below instead.
+
+## 3. Run from a terminal
 
 Open a terminal in this folder and run:
 
@@ -38,7 +44,7 @@ py .\convert_csv_to_zefania.py .\verses.csv .\bible.xml
 
 The XML output will contain books in the order they first appear in the CSV. Chapters and verses are sorted numerically. The converter stops with a row-specific error if a required value is missing, a chapter or verse number is not a positive integer, or a verse is duplicated.
 
-## 3. Use different CSV header names
+## 4. Use different CSV header names
 
 For a CSV with headers `Book Name,Chapter No,Verse No,Verse Text`, map them like this:
 

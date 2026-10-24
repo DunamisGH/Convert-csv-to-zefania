@@ -58,12 +58,17 @@ def convert(args: argparse.Namespace) -> None:
     if not books:
         raise ValueError("the CSV contains a header but no verse rows")
 
-    root = ET.Element("XMLBIBLE")
+    # FNT.xml uses the legacy Zefania root element named BIBLE.
+    root = ET.Element("BIBLE")
     for book_number, (book_name, chapters) in enumerate(books.items(), start=1):
         book = ET.SubElement(
             root,
             "BIBLEBOOK",
-            {"bnumber": str(book_number), "bsname": book_name, "bname": book_name},
+            {
+                "bnumber": str(book_number),
+                "bname": book_name,
+                "bsname": "".join(book_name.lower().split()),
+            },
         )
         for chapter_number in sorted(chapters):
             chapter = ET.SubElement(book, "CHAPTER", {"cnumber": str(chapter_number)})

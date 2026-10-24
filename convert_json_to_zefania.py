@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
-"""Convert a churchDB SQLite JSON table export to basic Zefania XML."""
+"""Convert a conforming, Zefania-shaped JSON document to Zefania XML."""
 
 import argparse
 import json
-import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
-def positive_int(value: object, description: str, row_number: int) -> int:
-    try:
-        number = int(value)
-    except (TypeError, ValueError):
-        raise ValueError(f"row {row_number}: invalid {description}: {value!r}")
-    if number < 1:
-        raise ValueError(f"row {row_number}: {description} must be at least 1; got {number}")
-    return number
+def required_object(value: object, description: str, row: int) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError(f"{description} {row} must be a JSON object")
+    return value
 
 
-def book_name(title: str) -> str:
-    """Convert titles such as '1ST KINGS' to the FNT-style '1 Kings'."""
-    title = title.strip()
-    title = re.sub(r"^(1ST|2ND|3RD)\b", lambda match: match.group(0)[0], title, flags=re.IGNORECASE)
-    return " ".join(word[:1].upper() + word[1:].lower() for word in title.split())
+def required_positive_int(value: object, field: str, description: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{description}: {field} must be a positive whole number")
+    return value
+
+
+def required_text(value: object, field: str, description: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{description}: {field} must be a non-empty string")
+    return value.strip()
 
 
 def convert(args: argparse.Namespace) -> None:
@@ -32,64 +32,62 @@ def convert(args: argparse.Namespace) -> None:
     except json.JSONDecodeError as error:
         raise ValueError(f"invalid JSON at line {error.lineno}, column {error.colno}: {error.msg}")
 
-    if not isinstance(data, dict) or not isinstance(data.get("columns"), list) or not isinstance(data.get("rows"), list):
-        raise ValueError("expected a database JSON export containing 'columns' and 'rows' arrays")
-
-    columns = [column.get("name") if isinstance(column, dict) else None for column in data["columns"]]
-    required = ("ari", "title", "verse")
-    missing = [name for name in required if name not in columns]
-    if missing:
-        raise ValueError(f"missing required JSON column(s): {', '.join(missing)}")
-    indexes = {name: columns.index(name) for name in required}
-
-    # Key by source book number so chapters/verses from interleaved rows regroup correctly.
-    books = {}
-    for row_number, row in enumerate(data["rows"], start=1):
-        if not isinstance(row, list) or len(row) < len(columns):
-            raise ValueError(f"row {row_number}: row does not match the JSON columns")
-        reference = row[indexes["ari"]]
-        title = row[indexes["title"]]
-        text = row[indexes["verse"]]
-        if not isinstance(reference, str) or not isinstance(title, str) or not isinstance(text, str):
-            raise ValueError(f"row {row_number}: ari, title, and verse must be strings")
-        parts = reference.split(":")
-        if len(parts) != 3:
-            raise ValueError(f"row {row_number}: expected ari in book:chapter:verse form; got {reference!r}")
-        book_number = positive_int(parts[0], "book number in ari", row_number)
-        chapter_number = positive_int(parts[1], "chapter number in ari", row_number)
-        verse_number = positive_int(parts[2], "verse number in ari", row_number)
-        if not title.strip() or not text.strip():
-            raise ValueError(f"row {row_number}: title and verse text cannot be blank")
-
-        normalized_name = book_name(title)
-        entry = books.setdefault(book_number, {"name": normalized_name, "chapters": {}})
-        if entry["name"] != normalized_name:
-            raise ValueError(
-                f"row {row_number}: book number {book_number} has conflicting titles "
-                f"{entry['name']!r} and {normalized_name!r}"
-            )
-        chapter = entry["chapters"].setdefault(chapter_number, {})
-        if verse_number in chapter:
-            raise ValueError(f"row {row_number}: duplicate verse {normalized_name} {chapter_number}:{verse_number}")
-        chapter[verse_number] = text.strip()
-
-    if not books:
-        raise ValueError("the JSON export contains no verse rows")
+    if not isinstance(data, dict) or not isinstance(data.get("books"), list):
+        raise ValueError("top level must be an object with a 'books' array")
+    if not data["books"]:
+        raise ValueError("the 'books' array is empty")
 
     root = ET.Element("BIBLE")
-    for book_number in sorted(books):
-        entry = books[book_number]
-        name = entry["name"]
+    seen_book_numbers = set()
+    seen_abbreviations = set()
+    for book_index, value in enumerate(data["books"], start=1):
+        book_data = required_object(value, "book", book_index)
+        description = f"book {book_index}"
+        number = required_positive_int(book_data.get("bnumber"), "bnumber", description)
+        name = required_text(book_data.get("bname"), "bname", description)
+        abbreviation = required_text(book_data.get("bsname"), "bsname", description)
+        if number in seen_book_numbers:
+            raise ValueError(f"{description}: duplicate bnumber {number}")
+        if abbreviation in seen_abbreviations:
+            raise ValueError(f"{description}: duplicate bsname {abbreviation!r}")
+        seen_book_numbers.add(number)
+        seen_abbreviations.add(abbreviation)
+
+        chapters_data = book_data.get("chapters")
+        if not isinstance(chapters_data, list) or not chapters_data:
+            raise ValueError(f"{description}: 'chapters' must be a non-empty array")
         book = ET.SubElement(
             root,
             "BIBLEBOOK",
-            {"bnumber": str(book_number), "bname": name, "bsname": "".join(name.lower().split())},
+            {"bnumber": str(number), "bname": name, "bsname": abbreviation},
         )
-        for chapter_number in sorted(entry["chapters"]):
+        seen_chapters = set()
+        for chapter_index, chapter_value in enumerate(chapters_data, start=1):
+            chapter_data = required_object(chapter_value, f"{description} chapter", chapter_index)
+            chapter_description = f"{description}, chapter {chapter_index}"
+            chapter_number = required_positive_int(
+                chapter_data.get("cnumber"), "cnumber", chapter_description
+            )
+            if chapter_number in seen_chapters:
+                raise ValueError(f"{chapter_description}: duplicate cnumber {chapter_number}")
+            seen_chapters.add(chapter_number)
+            verses_data = chapter_data.get("verses")
+            if not isinstance(verses_data, list) or not verses_data:
+                raise ValueError(f"{chapter_description}: 'verses' must be a non-empty array")
             chapter = ET.SubElement(book, "CHAPTER", {"cnumber": str(chapter_number)})
-            for verse_number in sorted(entry["chapters"][chapter_number]):
+            seen_verses = set()
+            for verse_index, verse_value in enumerate(verses_data, start=1):
+                verse_data = required_object(verse_value, f"{chapter_description} verse", verse_index)
+                verse_description = f"{chapter_description}, verse record {verse_index}"
+                verse_number = required_positive_int(
+                    verse_data.get("vnumber"), "vnumber", verse_description
+                )
+                text = required_text(verse_data.get("text"), "text", verse_description)
+                if verse_number in seen_verses:
+                    raise ValueError(f"{chapter_description}: duplicate vnumber {verse_number}")
+                seen_verses.add(verse_number)
                 verse = ET.SubElement(chapter, "VERS", {"vnumber": str(verse_number)})
-                verse.text = entry["chapters"][chapter_number][verse_number]
+                verse.text = text
 
     ET.indent(root, space="  ")
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -98,7 +96,7 @@ def convert(args: argparse.Namespace) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Convert a churchDB database JSON export to Zefania XML."
+        description="Convert a Zefania-shaped JSON document to Zefania XML."
     )
     parser.add_argument("input", type=Path, nargs="?", help="source JSON file")
     parser.add_argument("output", type=Path, nargs="?", help="destination XML file")
@@ -121,7 +119,7 @@ def run_file_picker(args: argparse.Namespace) -> int:
     window.update()
     try:
         selected = filedialog.askopenfilename(
-            title="Choose a Bible database JSON file",
+            title="Choose a Zefania-shaped JSON file",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
         )
         if not selected:

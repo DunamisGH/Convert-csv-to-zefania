@@ -1,33 +1,54 @@
-# Convert JSON to Zefania XML
+# Convert conforming JSON to Zefania XML
 
-`convert_json_to_zefania.py` converts the churchDB database JSON export used by `bblfnt.json` into a Zefania XML file with the same core structure as `FNT.xml`. It uses only Python's standard library.
+`convert_json_to_zefania.py` converts a JSON document with the structure below into Zefania XML using the same core elements as `FNT.xml`. Prepare your JSON in this format before running the script. It does not read the churchDB database export format.
+
+## Required JSON structure
+
+The JSON must have a top-level `books` array. Each book needs `bnumber`, `bname`, `bsname`, and a `chapters` array. Each chapter needs `cnumber` and a `verses` array. Each verse needs `vnumber` and `text`.
+
+```json
+{
+  "books": [
+    {
+      "bnumber": 1,
+      "bname": "Genesis",
+      "bsname": "genesis",
+      "chapters": [
+        {
+          "cnumber": 1,
+          "verses": [
+            { "vnumber": 1, "text": "In the beginning God created the heaven and the earth." },
+            { "vnumber": 2, "text": "And the earth was without form, and void." }
+          ]
+        },
+        {
+          "cnumber": 2,
+          "verses": [
+            { "vnumber": 1, "text": "Thus the heavens and the earth were finished." }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Use positive whole numbers for all number fields. `bnumber` should match the numbering expected by the Bible app; `bname` is the displayed book name; `bsname` is the short book identifier used by the app. Book, chapter, and verse numbers must be unique at their respective level. The script keeps the order of books, chapters, and verses from the JSON.
 
 ## Double-click workflow
 
-Double-click `convert_json_to_zefania.py`, select a `.json` file, and the script saves an `.xml` file beside it with the same base name. For example, `bblfnt.json` produces `bblfnt.xml`. If that XML already exists, the script asks before replacing it. Cancel the file picker to exit.
+Double-click `convert_json_to_zefania.py`, select a conforming `.json` file, and the script saves an `.xml` file beside it with the same base name. For example, `FNT.json` produces `FNT.xml`. If that XML already exists, the script asks before replacing it. Cancel the file picker to exit.
 
-Python must be installed and associated with `.py` files for double-clicking to work. If double-clicking opens the file in an editor or does nothing, use PowerShell from this folder:
-
-```powershell
-python .\convert_json_to_zefania.py .\bblfnt.json
-```
-
-You can also specify the output path explicitly:
+Python must be installed and associated with `.py` files for double-clicking to work. If double-clicking opens the file in an editor or does nothing, run it from PowerShell in this folder:
 
 ```powershell
-python .\convert_json_to_zefania.py .\bblfnt.json .\bblfnt.xml
+python .\convert_json_to_zefania.py .\FNT.json
 ```
 
-## Expected JSON structure
+You can specify a different output path if needed:
 
-The script expects the database export shape used by `bblfnt.json`: a top-level `columns` array describing the fields, plus a `rows` array containing each record as an array. It reads:
+```powershell
+python .\convert_json_to_zefania.py .\FNT.json .\output.xml
+```
 
-- `ari`: book number, chapter, and verse, such as `1:1:1`
-- `title`: English Bible book title, such as `GENESIS` or `1ST KINGS`
-- `verse`: verse text
-
-The extra `name` column is ignored. This converter is for that database export format, not arbitrary JSON layouts.
-
-The output uses `<BIBLE>` → `<BIBLEBOOK>` → `<CHAPTER>` → `<VERS>`, matching the core structure in `FNT.xml`. Book numbers come from the first part of `ari`; chapters and verses are sorted numerically. Titles like `1ST KINGS` become `bname="1 Kings"` and `bsname="1kings"`.
-
-The source JSON has 64 unique books, with book IDs 8 and 9 absent. The converter preserves the IDs in `ari`, so those missing books remain gaps in `bnumber` rather than being renumbered.
+The resulting XML uses `<BIBLE>` → `<BIBLEBOOK>` → `<CHAPTER>` → `<VERS>`. `bnumber`, `bname`, and `bsname` are copied from the JSON fields.

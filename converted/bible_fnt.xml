@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<BIBLE>
+<BIBLE_FNT>
   <BIBLEBOOK bnumber="1" bname="GYENESIS" bsname="gyenesis">
     <CHAPTER cnumber="1">
       <VERS vnumber="1">Ahyɛse no Nyankopɔn bɔɔ sor nye asaase.</VERS>
@@ -32421,4 +32421,4 @@
       <VERS vnumber="21">Ewuradze Jesus adom no nye hom nyina ntsena. [Amen.]</VERS>
     </CHAPTER>
   </BIBLEBOOK>
-</BIBLE>
+</BIBLE_FNT>
